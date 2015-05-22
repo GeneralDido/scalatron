@@ -37,12 +37,9 @@ class ControlFunction() {
     def goodbye(energy: Int) = ""
 
     def reactAsMaster(view: View, params: Map[String, String]) = {
-        
-        "Move(direction=" + view.actualPerformance().toString + ")"        
-    
+        "Status(text= Energy:"+params("energy")+")|Move(direction=" + view.actualPerformance().toString + ")"
     
     }
-    
     def reactAsSlave(view: View, params: Map[String, String]) = "Status(text=Slave)"
 }
 
@@ -52,7 +49,7 @@ case class View(cells: String) {
     val BAD_BOT = ('b',-200)
     val GOOD_PLANT = ('P',300)
     val BAD_PLANT = ('p',-100)
-    val UNKNOWN = ('?',-40)
+    val UNKNOWN = ('?',-35)
     val WALL = ('W',-100)
     val EMPTY = ('_',0)
     val MASTER_BOT = 'M'
@@ -61,19 +58,6 @@ case class View(cells: String) {
     
     val size = math.sqrt(cells.length).toInt
     val center = XY(size/2, size/2)
-
-    def offsetToNearest(c: Char) = {
-        val relativePositions =
-            cells
-            .view
-            .zipWithIndex
-            .filter(_._1 == c)
-            .map(p => relPosFromIndex(p._2))
-        if(relativePositions.isEmpty)
-            None
-        else
-            Some(relativePositions.minBy(_.length))
-    }
     
     def cellValue(c:Char):Double = {
         c match {
@@ -116,10 +100,9 @@ case class View(cells: String) {
     def performancePerDistance(arrayCharsIndeces: Seq[(Char,Int)], entity: Char, destination: XY):Double = {
 
         val entityStepsFromDestination = arrayCharsIndeces
-        .filter(_._1 == entity)           .filter(_ != destination)
-        .map(p => absPosFromIndex(p._2)) 
+        .filter(_._1 == entity).filter(_ != destination)
+        .map(p => absPosFromIndex(p._2))
         .map(calculateRequiredSteps(_,destination))
-        .filter( _ <= 10)
         
         entityStepsFromDestination.map(p => math.pow(BASE,-p)).map(cellValue(entity)*_).foldLeft[Double](0)(_ + _)
         
