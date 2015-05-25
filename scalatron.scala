@@ -1,7 +1,10 @@
 // Tutorial Bot #10: Food Finder
 // Step 5: exploiting the nearest food item
+import util.Random
 
 class ControlFunction() {
+    
+    val rnd = new Random
     // this method is called by the server
     def respond(input: String): String = {
         val (opcode, params) = CommandParser(input)
@@ -37,10 +40,26 @@ class ControlFunction() {
     def goodbye(energy: Int) = ""
 
     def reactAsMaster(view: View, params: Map[String, String]) = {
-        "Status(text= Energy:"+params("energy")+")|Move(direction=" + view.actualPerformance().toString + ")"
-    
+        val direction = view.actualPerformance(false)._1.toString
+        if (rnd.nextDouble() < 0.6)
+            "Move(direction=" + direction + ")|Spawn(direction=" + direction + ",energy=100,heading=" + direction + ")"
+        else
+            "Move(direction=" + direction + ")"
     }
-    def reactAsSlave(view: View, params: Map[String, String]) = "Status(text=Slave)"
+    def reactAsSlave(view: View, params: Map[String, String]) = {
+        
+        val output = view.actualPerformance(true)
+        val direction = output._1.toString
+        val EnemyIsNear = output._2
+        if (EnemyIsNear == 1000000)
+            "Explode(size=3)"
+        else if (params(("energy")).toInt >=4000)
+            "Move(direction=" + params("master") + ")"
+       else if (params("generation").toInt < 3 && rnd.nextDouble() < 0.2)
+            "Move(direction=" + direction + ")|Spawn(direction=" + direction + ",energy=100,heading=" + direction + ")"
+        else
+            "Move(direction=" + direction + ")"
+    }
 }
 
 case class View(cells: String) {
@@ -52,8 +71,10 @@ case class View(cells: String) {
     val UNKNOWN = ('?',-35)
     val WALL = ('W',-100)
     val EMPTY = ('_',0)
+    val ENEMY_MASTER = ('m', -200)
+    val ENEMY_MINI = ('s', -200)
     val MASTER_BOT = 'M'
-    val MINI_BOT = 'S'
+    val MINI_BOT = ('S',500)
     val BASE = 1.5
     
     val size = math.sqrt(cells.length).toInt
@@ -68,32 +89,47 @@ case class View(cells: String) {
             case UNKNOWN._1 => UNKNOWN._2.toDouble
             case WALL._1 => WALL._2.toDouble
             case EMPTY._1 => EMPTY._2.toDouble
+            case MINI_BOT => MINI_BOT._2.toDouble
+            case ENEMY_MASTER => ENEMY_MASTER._2.toDouble
+            case ENEMY_MINI => ENEMY_MINI._2.toDouble
             case _ => 0.0
         }
     }
     
-    def calculatePerformance(cells_array: Seq[(Char,Int)] ,cells_position: XY):Double = {
+    def calculatePerformance(cells_array: Seq[(Char,Int)] ,cells_position: XY, isMini: Boolean):Double = {
+                
+        val entities = Array(GOOD_BOT._1, GOOD_PLANT._1, BAD_BOT._1, BAD_PLANT._1, UNKNOWN._1)
+        val enemy = Array(ENEMY_MASTER._1, ENEMY_MINI._1)        
+        val miniBots = performancePerDistance(cells_array, MINI_BOT._1, cells_position)
+        val cell = cells_array(indexFromAbsPos(cells_position))._1
+        val cellvalue = cellValue(cell)
+
+        val DetonateEnemy = enemy.map(performancePerDistance(cells_array, _, cells_position)).foldLeft[Double](0)(_ + _)
+        val path = entities.map(performancePerDistance(cells_array, _, cells_position)).foldLeft[Double](0)(_ + _)
         
-        val performance =
-            performancePerDistance(cells_array, GOOD_BOT._1, cells_position) + 
-            performancePerDistance(cells_array, BAD_BOT._1, cells_position) +
-            performancePerDistance(cells_array, GOOD_PLANT._1, cells_position) +
-            performancePerDistance(cells_array, BAD_PLANT._1, cells_position) +
-            performancePerDistance(cells_array, UNKNOWN._1, cells_position)   +
-            cellValue(cells_array(indexFromAbsPos(cells_position))._1)
-        return performance
-    }
+        var performance = path + DetonateEnemy + cellvalue
+
+        if (isMini)
+            if(DetonateEnemy <= -100.00)
+                return 1000000
+            else if (cell == MINI_BOT)
+                return performance - miniBots - 2 * cellvalue
+            else
+                return performance - miniBots
+        else
+            return performance + miniBots
+    } 
     
     
-    def actualPerformance():XY = {
+    def actualPerformance(isMini: Boolean):(XY,Double) = {
         
         val cells_array = cells.view.zipWithIndex   
 
         val destination = Array(XY.Right,XY.RightUp,XY.Up,XY.UpLeft,XY.Left,XY.LeftDown,XY.Down,XY.DownRight)
         
-        val performance = destination.map(p => calculatePerformance(cells_array, absPosFromRelPos(p))).zipWithIndex.max
+        val performance = destination.map(p => calculatePerformance(cells_array, absPosFromRelPos(p), isMini)).zipWithIndex.max
         
-        return destination(performance._2)
+        return (destination(performance._2),performance._1)
     }
     
     
